@@ -110,7 +110,6 @@
     </div>
 
     <script>
-        // === SUPABASE 配置已绑定 ===
         const SUPABASE_URL = 'https://bjzoqgtlvezubkwxwctd.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_LMBebJ2Jwj9Wv6fGh7GDdA_8TKJQ-I8';
 
@@ -125,22 +124,18 @@
         let selectedBrandFilter = 'Todos';
         let isAdminMode = false;
 
-        // 从云端加载数据
         async function loadCloudData() {
-            if (!supabaseClient) {
-                alert("Error al conectar con Supabase.");
-                return;
-            }
+            if (!supabaseClient) return;
 
             try {
                 const { data, error } = await supabaseClient.from('models').select('*').order('id', { ascending: false });
                 if (error) throw error;
                 if (data) {
                     database = data.map(item => {
-                        // 兼容多种数据结构字段
-                        const brand = item.brand || (item.data && (item.data.marca || item.data.brand)) || 'Otros';
-                        const model = item.model || (item.data && (item.data.modelos || item.data.model)) || '';
-                        return { id: item.id, brand: brand, model: model };
+                        // 完美兼容 jsonb 的 data 结构或独立列结构
+                        const brand = (item.data && (item.data.marca || item.data.brand)) || item.brand || 'Otros';
+                        const model = (item.data && (item.data.modelos || item.data.model)) || item.model || '';
+                        return { id: item.id, brand: brand.toUpperCase(), model: model.toUpperCase() };
                     });
                 }
                 initApp();
@@ -260,17 +255,25 @@
 
         async function handleSaveModel(e) {
             e.preventDefault();
-            const brand = document.getElementById('inputBrand').value.trim();
-            const model = document.getElementById('inputModel').value.trim();
+            const brand = document.getElementById('inputBrand').value.trim().toUpperCase();
+            const model = document.getElementById('inputModel').value.trim().toUpperCase();
             const editId = document.getElementById('editId').value;
+
+            // 适配你 Supabase 中的 jsonb data 字段结构
+            const payload = {
+                data: {
+                    marca: brand,
+                    modelos: model
+                }
+            };
 
             try {
                 if (editId) {
-                    const { error } = await supabaseClient.from('models').update({ brand, model }).eq('id', editId);
+                    const { error } = await supabaseClient.from('models').update(payload).eq('id', editId);
                     if (error) throw error;
                     alert("¡Actualizado en el Cloud con éxito!");
                 } else {
-                    const { error } = await supabaseClient.from('models').insert([{ brand, model }]);
+                    const { error } = await supabaseClient.from('models').insert([payload]);
                     if (error) throw error;
                     alert("¡Añadido al Cloud con éxito!");
                 }
