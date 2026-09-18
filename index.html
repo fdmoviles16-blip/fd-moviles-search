@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FD Móviles - Buscador de Compatibilidad Cloud</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400,500,600,700,900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+        .highlight { background-color: #fde047; color: #1e293b; padding: 0 2px; border-radius: 3px; font-weight: 700; }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6">
+
+    <div class="max-w-6xl mx-auto">
+        <!-- 顶部导航栏：黑白手机 Logo -->
+        <header class="flex flex-col sm:flex-row justify-between items-center bg-white border border-slate-200 rounded-2xl p-5 mb-6 shadow-md gap-4">
+            <div class="flex items-center gap-4">
+                <div class="bg-black text-white px-4 py-2.5 rounded-2xl flex items-center gap-3.5 shadow-md border border-slate-800">
+                    <div class="relative w-8 h-11 border-2 border-white rounded-[6px] bg-black flex items-center justify-center shadow-inner">
+                        <div class="absolute top-1 w-3 h-0.5 bg-white rounded-full"></div>
+                        <span class="text-[11px] font-black tracking-tighter text-white mt-1">FD</span>
+                    </div>
+                    <div class="flex flex-col">
+                        <div class="text-lg sm:text-xl font-black tracking-widest leading-none text-white">
+                            MÓVILES
+                        </div>
+                        <div class="text-[8px] sm:text-[9px] tracking-tight text-slate-300 font-semibold uppercase mt-1">
+                            ACCESORIOS Y REPARACIONES
+                        </div>
+                    </div>
+                </div>
+                <div class="hidden sm:block">
+                    <p class="text-xs text-slate-400 font-medium">Sincronización Cloud Activa</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div id="syncStatus" class="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs font-medium text-slate-700">
+                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Conectado a Cloud
+                </div>
+                <button onclick="requestAdminAccess()" id="modeToggleBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-4 py-2 rounded-xl transition-all border border-slate-300 shadow-sm">
+                    ⚙️ Modo Gestión
+                </button>
+            </div>
+        </header>
+
+        <!-- 模块一：搜索界面 -->
+        <div id="searchSection" class="space-y-6">
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </span>
+                    <input type="text" id="searchInput" oninput="filterModels()" placeholder="Busca por modelo o compatible (ej. IPHONE 13, A05S, NOTE 12, Y36)..." class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 text-sm shadow-inner">
+                </div>
+                <div id="brandPills" class="flex flex-wrap gap-2 pt-2 border-t border-slate-100"></div>
+            </div>
+
+            <div class="space-y-4">
+                <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Resultados de Compatibilidad (<span id="resultCount">0</span>)</h2>
+                <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+
+        <!-- 模块二：后台管理面板 -->
+        <div id="adminSection" class="space-y-6 hidden">
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-slate-900" id="adminFormTitle">➕ Añadir Nuevo Modelo al Cloud</h2>
+                    <button onclick="resetAdminForm()" class="text-xs text-slate-500 hover:text-slate-900 underline">Cancelar / Limpiar</button>
+                </div>
+
+                <form id="modelForm" onsubmit="handleSaveModel(event)" class="space-y-4">
+                    <input type="hidden" id="editId" value="">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Marca (品牌)</label>
+                            <input type="text" id="inputBrand" placeholder="Ej. Apple, Samsung, Xiaomi" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Texto del Modelo / Compatibilidad (型号文字)</label>
+                            <input type="text" id="inputModel" placeholder="Ej. IPHONE 16 PRO / NUEVO MODELO" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900">
+                        </div>
+                    </div>
+                    <button type="submit" id="submitBtn" class="w-full bg-slate-900 hover:bg-black text-white font-semibold py-3 rounded-xl transition-all shadow-md text-sm">
+                        Guardar en la Base de Datos Cloud
+                    </button>
+                </form>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-slate-900">Inventario Cloud (<span id="totalCount">0</span>)</h2>
+                    <button onclick="loadCloudData()" class="text-xs text-blue-600 hover:underline">🔄 Actualizar datos desde Cloud</button>
+                </div>
+                <div class="relative">
+                    <input type="text" id="adminSearchInput" oninput="renderAdminList()" placeholder="Filtrar en el inventario..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900">
+                </div>
+                <div id="adminListContainer" class="space-y-3 max-h-[600px] overflow-y-auto pr-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === SUPABASE 配置已绑定 ===
+        const SUPABASE_URL = 'https://bjzoqgtlvezubkwxwctd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_LMBebJ2Jwj9Wv6fGh7GDdA_8TKJQ-I8';
+
+        let supabaseClient = null;
+        try {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch (e) {
+            console.warn("Supabase 初始化错误:", e);
+        }
+
+        let database = [];
+        let selectedBrandFilter = 'Todos';
+        let isAdminMode = false;
+
+        // 从云端加载数据
+        async function loadCloudData() {
+            if (!supabaseClient) {
+                alert("Error al conectar con Supabase.");
+                return;
+            }
+
+            try {
+                const { data, error } = await supabaseClient.from('models').select('*').order('id', { ascending: false });
+                if (error) throw error;
+                if (data) {
+                    database = data.map(item => {
+                        // 兼容多种数据结构字段
+                        const brand = item.brand || (item.data && (item.data.marca || item.data.brand)) || 'Otros';
+                        const model = item.model || (item.data && (item.data.modelos || item.data.model)) || '';
+                        return { id: item.id, brand: brand, model: model };
+                    });
+                }
+                initApp();
+            } catch (err) {
+                console.error("Error al cargar de Supabase:", err);
+                document.getElementById('syncStatus').innerHTML = `<span class="h-2.5 w-2.5 rounded-full bg-red-500"></span> Error de Cloud`;
+            }
+        }
+
+        function initApp() {
+            renderBrandPills();
+            filterModels();
+            if(isAdminMode) renderAdminList();
+        }
+
+        function requestAdminAccess() {
+            if (!isAdminMode) {
+                const pwd = prompt("Introduce la contraseña de administrador:");
+                if (pwd === null) return;
+                if (pwd !== "FD12345") {
+                    alert("¡Contraseña incorrecta!");
+                    return;
+                }
+            }
+            toggleAdminMode();
+        }
+
+        function toggleAdminMode() {
+            isAdminMode = !isAdminMode;
+            const searchSec = document.getElementById('searchSection');
+            const adminSec = document.getElementById('adminSection');
+            const btn = document.getElementById('modeToggleBtn');
+
+            if (isAdminMode) {
+                searchSec.classList.add('hidden');
+                adminSec.classList.remove('hidden');
+                btn.innerHTML = "🔍 Volver al Buscador";
+                btn.className = "bg-slate-900 hover:bg-black text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-md";
+                renderAdminList();
+            } else {
+                searchSec.classList.remove('hidden');
+                adminSec.classList.add('hidden');
+                btn.innerHTML = "⚙️ Modo Gestión";
+                btn.className = "bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-4 py-2 rounded-xl transition-all border border-slate-300 shadow-sm";
+                renderBrandPills();
+                filterModels();
+            }
+        }
+
+        function renderBrandPills() {
+            const brands = ['Todos', ...new Set(database.map(i => i.brand))];
+            const pillsContainer = document.getElementById('brandPills');
+            pillsContainer.innerHTML = '';
+
+            brands.forEach(brand => {
+                const isActive = selectedBrandFilter === brand;
+                const btn = document.createElement('button');
+                btn.className = `px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    isActive ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`;
+                btn.innerText = brand;
+                btn.onclick = () => {
+                    selectedBrandFilter = brand;
+                    renderBrandPills();
+                    filterModels();
+                };
+                pillsContainer.appendChild(btn);
+            });
+        }
+
+        function highlightMatch(text, query) {
+            if (!query) return text;
+            const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            return text.replace(new RegExp(`(${escapedQuery})`, 'gi'), '<span class="highlight">$1</span>');
+        }
+
+        function filterModels() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const filtered = database.filter(item => {
+                const matchesBrand = selectedBrandFilter === 'Todos' || item.brand.toLowerCase() === selectedBrandFilter.toLowerCase();
+                const matchesQuery = !query || item.model.toLowerCase().includes(query) || item.brand.toLowerCase().includes(query);
+                return matchesBrand && matchesQuery;
+            });
+
+            document.getElementById('resultCount').innerText = filtered.length;
+            const grid = document.getElementById('resultsGrid');
+            grid.innerHTML = '';
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 shadow-sm">No se encontraron modelos.</div>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const highlighted = highlightMatch(item.model, query);
+                grid.innerHTML += `
+                    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 hover:border-slate-900 transition-all flex flex-col justify-between">
+                        <div class="flex justify-between items-center">
+                            <span class="bg-slate-900 text-white text-xs font-bold px-3 py-1 rounded-lg uppercase">${item.brand}</span>
+                            <span class="text-xs font-semibold text-slate-400">#${item.id}</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <p class="text-xs text-slate-500 font-medium">Especificación / Modelos:</p>
+                            <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 text-slate-900 text-xs sm:text-sm font-semibold uppercase leading-relaxed shadow-inner">
+                                ${highlighted}
+                            </div>
+                        </div>
+                        <div class="flex justify-end pt-2 border-t border-slate-100">
+                            <button onclick="navigator.clipboard.writeText('${item.model.replace(/'/g, "\\'")}')" class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition-all border border-slate-200">
+                                📋 Copiar modelo
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function handleSaveModel(e) {
+            e.preventDefault();
+            const brand = document.getElementById('inputBrand').value.trim();
+            const model = document.getElementById('inputModel').value.trim();
+            const editId = document.getElementById('editId').value;
+
+            try {
+                if (editId) {
+                    const { error } = await supabaseClient.from('models').update({ brand, model }).eq('id', editId);
+                    if (error) throw error;
+                    alert("¡Actualizado en el Cloud con éxito!");
+                } else {
+                    const { error } = await supabaseClient.from('models').insert([{ brand, model }]);
+                    if (error) throw error;
+                    alert("¡Añadido al Cloud con éxito!");
+                }
+                await loadCloudData();
+                resetAdminForm();
+            } catch (err) {
+                alert("Error al guardar en Cloud: " + err.message);
+            }
+        }
+
+        async function deleteModel(id) {
+            if (confirm("¿Estás seguro de eliminar este registro del Cloud?")) {
+                const { error } = await supabaseClient.from('models').delete().eq('id', id);
+                if (error) {
+                    alert("Error al borrar: " + error.message);
+                    return;
+                }
+                await loadCloudData();
+            }
+        }
+
+        function editModel(id) {
+            const item = database.find(i => i.id === id);
+            if (!item) return;
+            document.getElementById('inputBrand').value = item.brand;
+            document.getElementById('inputModel').value = item.model;
+            document.getElementById('editId').value = item.id;
+            document.getElementById('adminFormTitle').innerText = "✏️ Modificar Modelo en Cloud";
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function renderAdminList() {
+            const filterQuery = document.getElementById('adminSearchInput').value.toLowerCase().trim();
+            const container = document.getElementById('adminListContainer');
+            document.getElementById('totalCount').innerText = database.length;
+            container.innerHTML = '';
+
+            const filtered = database.filter(item => !filterQuery || item.brand.toLowerCase().includes(filterQuery) || item.model.toLowerCase().includes(filterQuery));
+
+            filtered.forEach(item => {
+                container.innerHTML += `
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex justify-between items-center gap-4">
+                        <div>
+                            <span class="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded">${item.brand}</span>
+                            <p class="text-xs sm:text-sm font-bold text-slate-900 uppercase mt-1">${item.model}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="editModel(${item.id})" class="bg-slate-100 hover:bg-slate-200 text-slate-900 text-xs font-semibold px-3 py-1.5 rounded-lg border">✏️ Editar</button>
+                            <button onclick="deleteModel(${item.id})" class="bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200">🗑️ Borrar</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function resetAdminForm() {
+            document.getElementById('modelForm').reset();
+            document.getElementById('editId').value = "";
+            document.getElementById('adminFormTitle').innerText = "➕ Añadir Nuevo Modelo al Cloud";
+        }
+
+        window.onload = function() {
+            loadCloudData();
+        };
+    </script>
+</body>
+</html>
